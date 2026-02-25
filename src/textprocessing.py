@@ -3,6 +3,7 @@ from matplotlib import pyplot as plt
 from docx import Document
 import re
 import os
+from phonemizer import phonemize
 
 # Constants.
 
@@ -190,22 +191,11 @@ def export_as_altavo_studio_format(sentences: list[str],
     """
 
     altavo_studio_pars = []
+    phonemized = phonemize(sentences, language='en-us', strip=True, backend='espeak', language_switch='remove-flags')
 
-    try:
-        from altavo_mlmodules.textprocessing import PhonemizerTranscription
-    except ImportError as exc:
-        raise RuntimeError(
-            "altavo_mlmodules is required for export_as_altavo_studio_format. "
-            "Remove this call or install the proprietary package."
-        ) from exc
-
-    phonemizer = PhonemizerTranscription()
-
-    for idx, sen in enumerate(sentences):
+    for idx, (sen, tx) in enumerate(sentences, phonemized):
         if idx % 50 == 0:
             print(f'At index {idx}')
-        tx_idxs = phonemizer(sen, language=language)
-        tx = ''.join(phonemizer.decode(tx_idxs))
 
         if '<oov>' in tx:
             raise RuntimeError(f"OOV token in paragraph {idx}, {tx}.")

@@ -12,6 +12,7 @@ dependencies = [
   "matplotlib>=3.7",
   "python-docx>=0.8.11",
   "pypdf>=4.0.0",
+  "phonemizer"
 ]
 
 [project.optional-dependencies]
