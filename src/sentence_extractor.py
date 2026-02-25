@@ -8,7 +8,8 @@ from pathlib import Path
 import re
 from typing import Sequence
 
-DEFAULT_SOFT_DELIMITERS: list[str] = ["!", ";"," – ", "…", ", "]
+DEFAULT_HARD_DELIMITERS: list[str] = [".", "!", ";"]
+DEFAULT_SOFT_DELIMITERS: list[str] = [" – ", "…", ", "]
 WORDS_PER_SECOND = 2
 DEFAULT_CHAPTER_PATTERNS: list[str] = [
     r"^\s*(table of contents|contents?|inhaltsverzeichnis)\s*$",
@@ -16,6 +17,7 @@ DEFAULT_CHAPTER_PATTERNS: list[str] = [
     r"^\s*\d+\s*$",
     r"^\s*\d+\s*[\/-]\s*\d+\s*$",
     r"(CHAPTER\s+[IVXLCDM]+\s*\.)(.+?)\d"
+    r"* "
 ]
 TOC_HEADER_PATTERN = re.compile(r"\b(table of contents|contents|inhaltsverzeichnis)\b", flags=re.IGNORECASE)
 
@@ -298,11 +300,20 @@ def extract_text_from_txt(path: str | Path) -> str:
     return _normalize_whitespace(Path(path).read_text(encoding="utf-8"))
 
 
-def _split_on_periods(text: str) -> list[str]:
-    """Split text into sentence-like units on periods while retaining periods."""
+def _split_on_hard_delimiters(text: str, hard_delimiters: Sequence[str]) -> list[str]:
+    """Split text into sentence-like units on hard delimiters while retaining delimiters."""
     if not text:
         return []
-    pattern = re.compile(r'.+?(?:\.(?:["”’)\]]*)(?=\s|$|[A-ZÀ-ÖØ-Þ])|$)')
+
+    delimiter_chars = "".join(
+        re.escape(delimiter)
+        for delimiter in hard_delimiters
+        if isinstance(delimiter, str) and len(delimiter) == 1
+    )
+    if not delimiter_chars:
+        raise ValueError("hard_delimiters must contain at least one single-character delimiter")
+
+    pattern = re.compile(rf'.+?(?:[{delimiter_chars}](?:["”’)\]]*)(?=\s|$|[A-ZÀ-ÖØ-Þ])|$)')
     return [m.group(0).strip() for m in pattern.finditer(text) if m.group(0).strip()]
 
 
@@ -466,21 +477,23 @@ def split_text_into_sentences(
     text: str,
     min_length: int,
     max_length: int,
+    hard_delimiters: Sequence[str] | None = None,
     soft_delimiters: Sequence[str] | None = None,
 ) -> list[str]:
-    """Split text into sentences and balance lengths toward [min_length, max_length]."""
+    """Split text hierarchically: hard delimiters first, then soft refinement."""
     if min_length < 1:
         raise ValueError("min_length must be >= 1")
     if max_length < min_length:
         raise ValueError("max_length must be >= min_length")
 
+    hard_delims = list(DEFAULT_HARD_DELIMITERS if hard_delimiters is None else hard_delimiters)
     delimiters = list(DEFAULT_SOFT_DELIMITERS if soft_delimiters is None else soft_delimiters)
 
     text = _normalize_whitespace(text)
     if not text:
         return []
 
-    base_sentences = _split_on_periods(text)
+    base_sentences = _split_on_hard_delimiters(text, hard_delims)
 
     split_sentences: list[str] = []
     for sentence in base_sentences:
@@ -510,6 +523,7 @@ def extract_sentences_from_path(
     input_path: str | Path,
     min_length: int,
     max_length: int,
+    hard_delimiters: Sequence[str] | None = None,
     soft_delimiters: Sequence[str] | None = None,
     skip_pages: int = 0,
     chapter_titles_to_remove: Sequence[str] | None = None,
@@ -535,6 +549,7 @@ def extract_sentences_from_path(
         text=text,
         min_length=min_length,
         max_length=max_length,
+        hard_delimiters=hard_delimiters,
         soft_delimiters=soft_delimiters,
     )
 
