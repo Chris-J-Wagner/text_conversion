@@ -8,9 +8,9 @@ from pathlib import Path
 import re
 from typing import Sequence
 
-DEFAULT_SOFT_DELIMITERS: list[str] = [" – ", "…", ", "]
+DEFAULT_SOFT_DELIMITERS: list[str] = ["!", ";"," – ", "…", ", "]
+WORDS_PER_SECOND = 2
 DEFAULT_CHAPTER_PATTERNS: list[str] = [
-    # r"^\s*(chapter|kapitel|teil)\s+[\w\-\.\:\/ivxlcdm\d]+\s*$",
     r"^\s*(table of contents|contents?|inhaltsverzeichnis)\s*$",
     r"^\s*[IVXLCDM]+\s*$",
     r"^\s*\d+\s*$",
@@ -73,11 +73,8 @@ def _parse_toc_line(line: str, in_toc_region: bool) -> str | None:
         return None
 
     title_patterns = [
-        # "I. Down the Rabbit-Hole .... 1", "Chapter 1: Something 12"
         r"^(?:chapter|kapitel|teil)?\s*(?:[IVXLCDM]+|\d+)(?:[\.\):\-]\s*|\s+)(?P<title>.+?)\s*(?:\.{2,}\s*\d+|\s+\d+)\s*$",
-        # "Down the Rabbit-Hole .... 1"
         r"^(?P<title>.+?)\s*\.{2,}\s*\d+\s*$",
-        # "Chapter 1 Down the Rabbit-Hole"
         r"^(?:chapter|kapitel|teil)\s*(?:[IVXLCDM]+|\d+)?[\.\):\-]?\s*(?P<title>.+?)\s*$",
     ]
 
@@ -551,14 +548,36 @@ def write_sentences_output(sentences: Sequence[str], output_path: str | Path) ->
         path.write_text("\n".join(sentences) + "\n", encoding="utf-8")
 
 
-def chunk_sentences(sentences: Sequence[str], chunk_size: int) -> list[list[str]]:
-    """Split a sentence list into fixed-size chunks."""
-    if chunk_size < 1:
-        raise ValueError("chunk_size must be >= 1")
+def chunk_sentences_by_max_minutes(
+    sentences: Sequence[str],
+    max_chunk_minutes: float,
+    words_per_second: float = WORDS_PER_SECOND,
+) -> list[list[str]]:
+    """Split sentences into chunks based on cumulative reading duration."""
+    if max_chunk_minutes <= 0:
+        raise ValueError("max_chunk_minutes must be > 0")
+    if words_per_second <= 0:
+        raise ValueError("words_per_second must be > 0")
 
+    max_chunk_seconds = max_chunk_minutes * 60.0
     chunks: list[list[str]] = []
-    for idx in range(0, len(sentences), chunk_size):
-        chunks.append(list(sentences[idx : idx + chunk_size]))
+
+    current_chunk: list[str] = []
+    current_seconds = 0.0
+
+    for sentence in sentences:
+        sentence_seconds = count_words(sentence) / words_per_second
+        current_chunk.append(sentence)
+        current_seconds += sentence_seconds
+
+        if current_seconds >= max_chunk_seconds:
+            chunks.append(current_chunk)
+            current_chunk = []
+            current_seconds = 0.0
+
+    if current_chunk:
+        chunks.append(current_chunk)
+
     return chunks
 
 
@@ -578,3 +597,40 @@ def write_chunked_sentences_output(
         written_paths.append(chunk_path)
 
     return written_paths
+
+
+def write_chunk_sentence_length_histograms(
+    sentence_chunks: Sequence[Sequence[str]],
+    output_path: str | Path,
+) -> list[Path]:
+    """Write one histogram (sentence word lengths) per chunk to <output_dir>/charts."""
+    from matplotlib import pyplot as plt
+
+    path = Path(output_path)
+    charts_dir = path.parent / "charts"
+    charts_dir.mkdir(parents=True, exist_ok=True)
+
+    chart_paths: list[Path] = []
+    for idx, chunk in enumerate(sentence_chunks, start=1):
+        lengths = [count_words(sentence) for sentence in chunk]
+        if not lengths:
+            continue
+
+        max_len = max(lengths)
+        bins = range(1, max_len + 2)
+
+        fig, ax = plt.subplots(figsize=(8, 4))
+        ax.hist(lengths, bins=bins, edgecolor="black")
+        ax.set_title(f"Chunk {idx} Sentence Lengths")
+        ax.set_xlabel("Words per sentence")
+        ax.set_ylabel("Count")
+        ax.set_xticks(range(1, max_len + 1))
+        ax.grid(axis="y", alpha=0.3)
+
+        chart_path = charts_dir / f"chunk_{idx:04d}_sentence_length_hist.png"
+        fig.tight_layout()
+        fig.savefig(chart_path, dpi=150)
+        plt.close(fig)
+        chart_paths.append(chart_path)
+
+    return chart_paths

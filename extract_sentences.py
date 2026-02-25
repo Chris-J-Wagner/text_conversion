@@ -7,12 +7,13 @@ import argparse
 import json
 from pathlib import Path
 import sys
-import os
 
 from src.sentence_extractor import DEFAULT_SOFT_DELIMITERS
-from src.sentence_extractor import chunk_sentences
+from src.sentence_extractor import WORDS_PER_SECOND
+from src.sentence_extractor import chunk_sentences_by_max_minutes
 from src.sentence_extractor import extract_chapter_names_from_toc_pdf
 from src.sentence_extractor import extract_sentences_from_path
+from src.sentence_extractor import write_chunk_sentence_length_histograms
 from src.sentence_extractor import write_chunked_sentences_output
 from src.sentence_extractor import write_sentences_output
 
@@ -29,10 +30,13 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--min-length", type=int, default=5, help="Minimum words per sentence segment")
     parser.add_argument("--max-length", type=int, default=25, help="Maximum words per sentence segment")
     parser.add_argument(
-        "--chunk-size",
-        type=int,
-        default=0,
-        help="Optional number of sentences per chunk (e.g. 500). Disabled when 0.",
+        "--max-chunk-minutes",
+        type=float,
+        default=0.0,
+        help=(
+            "Optional maximum cumulative chunk duration in minutes. "
+            f"Duration is estimated with {WORDS_PER_SECOND} words/second. Disabled when 0."
+        ),
     )
     parser.add_argument(
         "--toc-scan-pages",
@@ -64,6 +68,15 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Print the sentence list as JSON to stdout (ignored if --output is set)",
     )
+    parser.add_argument(
+        "--plot-charts",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help=(
+            "Plot sentence-length histograms per chunk into <output_dir>/charts/ "
+            "(enabled by default; use --no-plot-charts to disable)."
+        ),
+    )
     return parser
 
 
@@ -92,17 +105,20 @@ def main() -> int:
         chapter_titles_to_remove=chapter_titles,
         extra_remove_patterns=args.remove_patterns,
     )
-    chunks = chunk_sentences(sentences, args.chunk_size) if args.chunk_size > 0 else [sentences]
+    chunks = (
+        chunk_sentences_by_max_minutes(sentences, args.max_chunk_minutes)
+        if args.max_chunk_minutes > 0
+        else [sentences]
+    )
 
     if args.output is not None:
-        folder_path = os.path.dirname(args.output)
-        os.makedirs(folder_path, exist_ok=True)
+        args.output.parent.mkdir(parents=True, exist_ok=True)
 
-        if args.chunk_size > 0:
+        if args.max_chunk_minutes > 0:
             written_paths = write_chunked_sentences_output(chunks, args.output)
             print(
                 f"Wrote {len(sentences)} sentences into {len(written_paths)} chunks "
-                f"(max {args.chunk_size} each)."
+                f"(max {args.max_chunk_minutes:g} minutes each, estimated)."
             )
             print("Chunk files:")
             for path in written_paths:
@@ -110,13 +126,18 @@ def main() -> int:
         else:
             write_sentences_output(sentences, args.output)
             print(f"Wrote {len(sentences)} sentences to {args.output}")
+
+        if args.plot_charts:
+            chart_paths = write_chunk_sentence_length_histograms(chunks, args.output)
+            charts_dir = args.output.parent / "charts"
+            print(f"Wrote {len(chart_paths)} chart(s) to {charts_dir}")
         return 0
 
     if args.stdout_json:
-        payload = chunks if args.chunk_size > 0 else sentences
+        payload = chunks if args.max_chunk_minutes > 0 else sentences
         print(json.dumps(payload, ensure_ascii=False, indent=2))
     else:
-        if args.chunk_size > 0:
+        if args.max_chunk_minutes > 0:
             for idx, chunk in enumerate(chunks, start=1):
                 print(f"# chunk {idx}")
                 for sentence in chunk:
@@ -125,7 +146,7 @@ def main() -> int:
             for sentence in sentences:
                 print(sentence)
 
-    if args.chunk_size > 0:
+    if args.max_chunk_minutes > 0:
         print(f"Total sentences: {len(sentences)} across {len(chunks)} chunks")
     else:
         print(f"Total sentences: {len(sentences)}")
