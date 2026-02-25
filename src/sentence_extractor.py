@@ -378,6 +378,44 @@ def _split_long_sentence(
     return segments
 
 
+def _ends_with_soft_delimiter(segment: str, soft_delimiters: Sequence[str]) -> bool:
+    """Check if a segment ends with a configured soft delimiter token."""
+    tail = segment.rstrip()
+    for delimiter in soft_delimiters:
+        token = delimiter.strip()
+        if token and tail.endswith(token):
+            return True
+    return False
+
+
+def _merge_soft_splits_when_within_max(
+    segments: Sequence[str],
+    max_length: int,
+    soft_delimiters: Sequence[str],
+) -> list[str]:
+    """Re-merge soft-delimiter splits when combined length stays within max."""
+    if not segments:
+        return []
+
+    merged: list[str] = []
+    idx = 0
+    while idx < len(segments):
+        current = segments[idx].strip()
+        while (
+            idx + 1 < len(segments)
+            and _ends_with_soft_delimiter(current, soft_delimiters)
+        ):
+            candidate = _normalize_whitespace(f"{current} {segments[idx + 1]}")
+            if count_words(candidate) > max_length:
+                break
+            current = candidate
+            idx += 1
+        merged.append(current)
+        idx += 1
+
+    return merged
+
+
 def _merge_short_segments(
     segments: Sequence[str],
     min_length: int,
@@ -462,6 +500,11 @@ def split_text_into_sentences(
             )
         )
 
+    split_sentences = _merge_soft_splits_when_within_max(
+        split_sentences,
+        max_length=max_length,
+        soft_delimiters=delimiters,
+    )
     merged = _merge_short_segments(split_sentences, min_length=min_length, max_length=max_length)
     return [_normalize_whitespace(sentence) for sentence in merged if sentence.strip()]
 
