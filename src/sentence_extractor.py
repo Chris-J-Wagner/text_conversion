@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Sequence
 from collections import Counter
 
-DEFAULT_HARD_DELIMITERS: list[str] = [".", "!", ";"]
+DEFAULT_HARD_DELIMITERS: list[str] = [".", "!", "?", ";"]
 DEFAULT_SOFT_DELIMITERS: list[str] = [" – ", "…", ", "]
 WORDS_PER_SECOND = 2
 DEFAULT_CHAPTER_PATTERNS: list[str] = [
