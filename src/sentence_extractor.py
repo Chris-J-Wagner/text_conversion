@@ -10,13 +10,14 @@ from typing import Sequence
 
 DEFAULT_SOFT_DELIMITERS: list[str] = [" – ", "…", ", "]
 DEFAULT_CHAPTER_PATTERNS: list[str] = [
-    r"^\s*(chapter|kapitel|teil)\s+[\w\-\.\:\/ivxlcdm\d]+\s*$",
+    # r"^\s*(chapter|kapitel|teil)\s+[\w\-\.\:\/ivxlcdm\d]+\s*$",
     r"^\s*(table of contents|contents?|inhaltsverzeichnis)\s*$",
     r"^\s*[IVXLCDM]+\s*$",
     r"^\s*\d+\s*$",
     r"^\s*\d+\s*[\/-]\s*\d+\s*$",
     r"(CHAPTER\s+[IVXLCDM]+\s*\.)(.+?)\d"
 ]
+TOC_HEADER_PATTERN = re.compile(r"\b(table of contents|contents|inhaltsverzeichnis)\b", flags=re.IGNORECASE)
 
 
 def count_words(text: str) -> int:
@@ -47,6 +48,63 @@ def _looks_like_heading(line: str) -> bool:
     return cleaned.isupper() or cleaned.istitle()
 
 
+def _normalize_title_key(text: str) -> str:
+    """Normalize a title/heading for robust equality checks."""
+    normalized = _normalize_whitespace(text).lower()
+    normalized = re.sub(r"^(chapter|kapitel|teil)\s+", "", normalized, flags=re.IGNORECASE)
+    normalized = re.sub(
+        r"^(?:[ivxlcdm]+|\d+)(?:[\.\):\-]\s*|\s+)",
+        "",
+        normalized,
+        flags=re.IGNORECASE,
+    )
+    normalized = re.sub(r"\s+\d+$", "", normalized)
+    normalized = re.sub(r"[^\wÀ-ÖØ-öø-ÿ]+", " ", normalized)
+    return _normalize_whitespace(normalized)
+
+
+def _parse_toc_line(line: str, in_toc_region: bool) -> str | None:
+    """Parse a TOC line into a chapter title if possible."""
+    cleaned = _normalize_whitespace(line)
+    if not cleaned or len(cleaned) > 180:
+        return None
+
+    if TOC_HEADER_PATTERN.search(cleaned):
+        return None
+
+    title_patterns = [
+        # "I. Down the Rabbit-Hole .... 1", "Chapter 1: Something 12"
+        r"^(?:chapter|kapitel|teil)?\s*(?:[IVXLCDM]+|\d+)(?:[\.\):\-]\s*|\s+)(?P<title>.+?)\s*(?:\.{2,}\s*\d+|\s+\d+)\s*$",
+        # "Down the Rabbit-Hole .... 1"
+        r"^(?P<title>.+?)\s*\.{2,}\s*\d+\s*$",
+        # "Chapter 1 Down the Rabbit-Hole"
+        r"^(?:chapter|kapitel|teil)\s*(?:[IVXLCDM]+|\d+)?[\.\):\-]?\s*(?P<title>.+?)\s*$",
+    ]
+
+    for pattern in title_patterns:
+        match = re.match(pattern, cleaned, flags=re.IGNORECASE)
+        if not match:
+            continue
+        title = _normalize_whitespace(match.group("title").strip(" -–—:;,."))
+        if re.search(r"[A-Za-zÀ-ÖØ-öø-ÿ]", title) and 1 <= len(title.split()) <= 16:
+            return title
+
+    # Fallback for TOC regions where extraction dropped page numbers/leaders:
+    # "I Down the Rabbit-Hole"
+    if in_toc_region:
+        match = re.match(
+            r"^(?:[IVXLCDM]+|\d+)(?:[\.\):\-]\s*|\s+)(?P<title>.+?)\s*$",
+            cleaned,
+            flags=re.IGNORECASE,
+        )
+        if match:
+            title = _normalize_whitespace(match.group("title").strip(" -–—:;,."))
+            if re.search(r"[A-Za-zÀ-ÖØ-öø-ÿ]", title) and 1 <= len(title.split()) <= 16:
+                return title
+
+    return None
+
+
 def _find_repeated_header_footer_lines(
     pages_lines: list[list[str]],
     lookaround_lines: int = 2,
@@ -73,12 +131,90 @@ def _find_repeated_header_footer_lines(
     return repeated
 
 
+def _chapter_title_match_span(
+    lines: Sequence[str],
+    start_idx: int,
+    chapter_title_keys: set[str],
+    max_span_lines: int = 4,
+) -> int:
+    """Return number of lines to skip if consecutive lines match a chapter title."""
+    combined = ""
+    for offset in range(max_span_lines):
+        idx = start_idx + offset
+        if idx >= len(lines):
+            break
+
+        piece = _normalize_whitespace(lines[idx])
+        if not piece:
+            break
+
+        combined = _normalize_whitespace(f"{combined} {piece}") if combined else piece
+        if _normalize_title_key(combined) in chapter_title_keys:
+            return offset + 1
+
+    return 0
+
+
+def extract_chapter_names_from_toc_pdf(path: str | Path, max_scan_pages: int = 30) -> list[str]:
+    """Extract chapter titles from a PDF table of contents."""
+    try:
+        from pypdf import PdfReader
+    except ImportError as exc:
+        raise RuntimeError("pypdf is required for PDF input. Install via: pip install pypdf") from exc
+
+    reader = PdfReader(str(path))
+    scan_pages = min(max_scan_pages, len(reader.pages))
+
+    chapter_titles: list[str] = []
+    seen_keys: set[str] = set()
+    in_toc_region = False
+    non_toc_page_streak = 0
+
+    for page_idx in range(scan_pages):
+        page_text = reader.pages[page_idx].extract_text() or ""
+        lines = [_normalize_whitespace(line) for line in page_text.splitlines()]
+        lines = [line for line in lines if line]
+
+        if not lines:
+            if in_toc_region:
+                non_toc_page_streak += 1
+            continue
+
+        has_toc_header = any(TOC_HEADER_PATTERN.search(line) for line in lines)
+        page_titles: list[str] = []
+        for line in lines:
+            title = _parse_toc_line(line, in_toc_region=in_toc_region or has_toc_header)
+            if title:
+                page_titles.append(title)
+
+        if has_toc_header or len(page_titles) >= 3:
+            in_toc_region = True
+
+        if not in_toc_region:
+            continue
+
+        if page_titles:
+            non_toc_page_streak = 0
+            for title in page_titles:
+                key = _normalize_title_key(title)
+                if key and key not in seen_keys:
+                    seen_keys.add(key)
+                    chapter_titles.append(title)
+        else:
+            non_toc_page_streak += 1
+            if non_toc_page_streak >= 2:
+                break
+
+    return chapter_titles
+
+
 def extract_text_from_pdf(
     path: str | Path,
     skip_pages: int = 0,
     remove_repeated_headers_footers: bool = True,
     drop_probable_headings: bool = True,
     chapter_patterns: Sequence[str] | None = None,
+    chapter_titles_to_remove: Sequence[str] | None = None,
     extra_remove_patterns: Sequence[str] | None = None,
 ) -> str:
     """Extract and clean text from a PDF file."""
@@ -107,23 +243,39 @@ def extract_text_from_pdf(
     compiled_patterns: list[re.Pattern[str]] = []
     pattern_list = list(DEFAULT_CHAPTER_PATTERNS if chapter_patterns is None else chapter_patterns)
     pattern_list.extend(extra_remove_patterns or [])
+    
     for pattern in pattern_list:
         compiled_patterns.append(re.compile(pattern, flags=re.IGNORECASE))
+    chapter_title_keys = {
+        key for key in (_normalize_title_key(title) for title in (chapter_titles_to_remove or [])) if key
+    }
 
     pages_text: list[str] = []
     for lines in pages_lines:
         kept: list[str] = []
-        for line in lines:
+        idx = 0
+        while idx < len(lines):
+            line = lines[idx]
             if line in repeated_lines:
+                idx += 1
                 continue
 
             if any(pattern.search(line) for pattern in compiled_patterns):
+                idx += 1
                 continue
 
+            if chapter_title_keys:
+                span = _chapter_title_match_span(lines, idx, chapter_title_keys)
+                if span > 0:
+                    idx += span
+                    continue
+
             if drop_probable_headings and _looks_like_heading(line):
+                idx += 1
                 continue
 
             kept.append(line)
+            idx += 1
 
         if not kept:
             continue
@@ -320,6 +472,7 @@ def extract_sentences_from_path(
     max_length: int,
     soft_delimiters: Sequence[str] | None = None,
     skip_pages: int = 0,
+    chapter_titles_to_remove: Sequence[str] | None = None,
     extra_remove_patterns: Sequence[str] | None = None,
 ) -> list[str]:
     """Extract text from TXT/PDF and split into balanced sentence segments."""
@@ -330,6 +483,7 @@ def extract_sentences_from_path(
         text = extract_text_from_pdf(
             path=path,
             skip_pages=skip_pages,
+            chapter_titles_to_remove=chapter_titles_to_remove,
             extra_remove_patterns=extra_remove_patterns,
         )
     elif suffix == ".txt":

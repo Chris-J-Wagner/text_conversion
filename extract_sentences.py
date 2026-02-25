@@ -6,9 +6,12 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
+import sys
+import os
 
 from src.sentence_extractor import DEFAULT_SOFT_DELIMITERS
 from src.sentence_extractor import chunk_sentences
+from src.sentence_extractor import extract_chapter_names_from_toc_pdf
 from src.sentence_extractor import extract_sentences_from_path
 from src.sentence_extractor import write_chunked_sentences_output
 from src.sentence_extractor import write_sentences_output
@@ -30,6 +33,12 @@ def build_parser() -> argparse.ArgumentParser:
         type=int,
         default=0,
         help="Optional number of sentences per chunk (e.g. 500). Disabled when 0.",
+    )
+    parser.add_argument(
+        "--toc-scan-pages",
+        type=int,
+        default=30,
+        help="Maximum number of initial PDF pages to scan for TOC chapter titles.",
     )
     parser.add_argument("--skip-pages", type=int, default=0, help="Skip N first pages (PDF only)")
     parser.add_argument(
@@ -60,6 +69,19 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main() -> int:
     args = build_parser().parse_args()
+    chapter_titles: list[str] = []
+
+    if args.input_path.suffix.lower() == ".pdf":
+        chapter_titles = extract_chapter_names_from_toc_pdf(
+            path=args.input_path,
+            max_scan_pages=args.toc_scan_pages,
+        )
+        print(
+            f"Found {len(chapter_titles)} chapter titles in table of contents.",
+            file=sys.stderr,
+        )
+        for idx, chapter in enumerate(chapter_titles, start=1):
+            print(f"{idx}. \"{chapter}\"", file=sys.stderr)
 
     sentences = extract_sentences_from_path(
         input_path=args.input_path,
@@ -67,11 +89,15 @@ def main() -> int:
         max_length=args.max_length,
         soft_delimiters=args.soft_delimiters,
         skip_pages=args.skip_pages,
+        chapter_titles_to_remove=chapter_titles,
         extra_remove_patterns=args.remove_patterns,
     )
     chunks = chunk_sentences(sentences, args.chunk_size) if args.chunk_size > 0 else [sentences]
 
     if args.output is not None:
+        folder_path = os.path.dirname(args.output)
+        os.makedirs(folder_path, exist_ok=True)
+
         if args.chunk_size > 0:
             written_paths = write_chunked_sentences_output(chunks, args.output)
             print(
