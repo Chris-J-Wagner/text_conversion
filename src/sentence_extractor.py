@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from collections import Counter
 import json
-from pathlib import Path
 import re
+from pathlib import Path
 from typing import Sequence
+from collections import Counter
 
 DEFAULT_HARD_DELIMITERS: list[str] = [".", "!", ";"]
 DEFAULT_SOFT_DELIMITERS: list[str] = [" – ", "…", ", "]
