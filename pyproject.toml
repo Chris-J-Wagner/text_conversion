@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "text-conversion"
+version = "0.1.0"
+description = "Utilities for converting documents to sentence corpora."
+requires-python = ">=3.10"
+dependencies = [
+  "numpy>=1.24",
+  "matplotlib>=3.7",
+  "python-docx>=0.8.11",
+  "pypdf>=4.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.0",
+]
+notebooks = [
+  "chardet>=5.0",
+  "pandas>=2.0",
+  "phonemizer>=3.2",
+  "regex>=2023.0.0",
+  "torch>=2.0",
+  "tqdm>=4.66",
+]
+
+[project.scripts]
+extract-sentences = "extract_sentences:main"
+
+[tool.setuptools]
+packages = ["src"]
+py-modules = ["extract_sentences"]
