@@ -8,22 +8,22 @@ import json
 from pathlib import Path
 import sys
 
-from text_conversion.sentence_extractor import DEFAULT_SOFT_DELIMITERS
-from text_conversion.sentence_extractor import WORDS_PER_SECOND
-from text_conversion.sentence_extractor import chunk_sentences_by_max_minutes
-from text_conversion.sentence_extractor import extract_chapter_names_from_toc_pdf
-from text_conversion.sentence_extractor import extract_sentences_from_path
-from text_conversion.sentence_extractor import write_chunk_sentence_length_histograms
-from text_conversion.sentence_extractor import write_chunked_sentences_output
+from altavo_corpus.sentence_extractor import DEFAULT_SOFT_DELIMITERS
+from altavo_corpus.sentence_extractor import WORDS_PER_SECOND
+from altavo_corpus.sentence_extractor import chunk_sentences_by_max_minutes
+from altavo_corpus.sentence_extractor import extract_chapter_names_from_toc_pdf
+from altavo_corpus.sentence_extractor import extract_sentences_from_path
+from altavo_corpus.sentence_extractor import write_chunk_sentence_length_histograms
+from altavo_corpus.sentence_extractor import write_chunked_sentences_output
 
 
-def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
-        description=(
-            "Extract text from a PDF or TXT file and split into sentence segments "
-            "with target word lengths in [min_length, max_length]."
-        )
-    )
+DESCRIPTION = (
+    "Extract text from a PDF or TXT file and split into sentence segments "
+    "with target word lengths in [min_length, max_length]."
+)
+
+
+def add_arguments(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
     parser.add_argument("input_path", type=Path, help="Path to .pdf or .txt input")
     parser.add_argument("--output", type=Path, default=None, help="Optional output file (.txt or .json)")
     parser.add_argument("--min-length", type=int, default=5, help="Minimum words per sentence segment")
@@ -79,8 +79,11 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def main() -> int:
-    args = build_parser().parse_args()
+def build_parser() -> argparse.ArgumentParser:
+    return add_arguments(argparse.ArgumentParser(description=DESCRIPTION))
+
+
+def run(args: argparse.Namespace) -> int:
     chapter_titles: list[str] = []
 
     if args.input_path.suffix.lower() == ".pdf":
@@ -152,6 +155,10 @@ def main() -> int:
     else:
         print(f"Total sentences: {len(sentences)}")
     return 0
+
+
+def main() -> int:
+    return run(build_parser().parse_args())
 
 
 if __name__ == "__main__":

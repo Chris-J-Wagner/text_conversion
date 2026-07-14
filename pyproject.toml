@@ -3,15 +3,15 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "text-conversion"
+name = "altavo-corpus"
 version = "0.1.0"
-description = "Utilities for converting documents (PDF/TXT/DOCX) into sentence corpora."
+description = "Convert documents (PDF/TXT/DOCX) into sentence corpora and Altavo CSVs."
 requires-python = ">=3.11"
 
-# Runtime dependencies of the command-line tools.
-#   pypdf      -> PDF text extraction (extract-sentences)
-#   matplotlib -> sentence-length histograms (extract-sentences, validate-corpus)
-#   phonemizer -> phoneme column (convert-to-altavo-csv; needs an espeak backend installed)
+# Runtime dependencies of the command-line tool.
+#   pypdf      -> PDF text extraction (extract)
+#   matplotlib -> sentence-length histograms (extract, validate)
+#   phonemizer -> phoneme column (convert; needs an espeak backend installed)
 dependencies = [
   "matplotlib>=3.7",
   "pypdf>=4.0.0",
@@ -25,11 +25,10 @@ dev = [
   "python-docx>=0.8.11",
 ]
 
-# Console commands installed by `uv tool install` / `pip install`.
+# Single command installed by `uv tool install` / `pip install`.
+# Subcommands: altavo-corpus {extract,validate,convert}
 [project.scripts]
-extract-sentences = "text_conversion.extract_sentences:main"
-validate-corpus = "text_conversion.validate_corpus:main"
-convert-to-altavo-csv = "text_conversion.convert_to_altavo_csv:main"
+altavo-corpus = "altavo_corpus.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

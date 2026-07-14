@@ -7,8 +7,8 @@ import argparse
 from pathlib import Path
 import re
 
-from text_conversion.sentence_extractor import count_words
-from text_conversion.sentence_extractor import write_chunk_sentence_length_histograms
+from altavo_corpus.sentence_extractor import count_words
+from altavo_corpus.sentence_extractor import write_chunk_sentence_length_histograms
 
 
 def _chunk_sort_key(path: Path) -> tuple[int, str]:
@@ -36,13 +36,13 @@ def _find_violating_indices(
     return violations
 
 
-def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
-        description=(
-            "Validate chunk files in a directory, replot per-chunk sentence-length histograms, "
-            "and report min/max length violations per chunk."
-        )
-    )
+DESCRIPTION = (
+    "Validate chunk files in a directory, replot per-chunk sentence-length histograms, "
+    "and report min/max length violations per chunk."
+)
+
+
+def add_arguments(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
     parser.add_argument("chunks_dir", type=Path, help="Directory containing chunk .txt files")
     parser.add_argument("--min-length", type=int, required=True, help="Minimum words per sentence")
     parser.add_argument("--max-length", type=int, required=True, help="Maximum words per sentence")
@@ -56,9 +56,11 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def main() -> int:
-    args = build_parser().parse_args()
+def build_parser() -> argparse.ArgumentParser:
+    return add_arguments(argparse.ArgumentParser(description=DESCRIPTION))
 
+
+def run(args: argparse.Namespace) -> int:
     if args.min_length < 1:
         raise ValueError("--min-length must be >= 1")
     if args.max_length < args.min_length:
@@ -110,6 +112,10 @@ def main() -> int:
     print(f"violations: {total_violations}/{total_sentences} ({overall_pct:.2f}%)")
 
     return 0
+
+
+def main() -> int:
+    return run(build_parser().parse_args())
 
 
 if __name__ == "__main__":

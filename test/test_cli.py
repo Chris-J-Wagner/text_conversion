@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from text_conversion import extract_sentences, validate_corpus
+from altavo_corpus import extract_sentences, validate_corpus
 
 ALICE_PDF = Path(__file__).parent / "data" / "alice-in-wonderland.pdf"
 

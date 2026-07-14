@@ -1,7 +1,7 @@
 import pytest
 
-from text_conversion.textprocessing import split_balanced
-from text_conversion.textprocessing import REGEX
+from altavo_corpus.textprocessing import split_balanced
+from altavo_corpus.textprocessing import REGEX
 
 def test_split_balanced():
 

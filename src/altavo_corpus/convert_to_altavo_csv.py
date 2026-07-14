@@ -70,13 +70,13 @@ def _phonemize_sentences(
     return out
 
 
-def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
-        description=(
-            "Convert one sentence .txt file or a directory of chunk .txt files "
-            "to Altavo-formatted CSV rows: id|sentence|phonemes"
-        )
-    )
+DESCRIPTION = (
+    "Convert one sentence .txt file or a directory of chunk .txt files "
+    "to Altavo-formatted CSV rows: id|sentence|phonemes"
+)
+
+
+def add_arguments(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
     parser.add_argument("input_path", type=Path, help="Input .txt file or directory")
     parser.add_argument("output_csv", type=Path, help="Output CSV path")
     parser.add_argument("--language", default="en-us", help="Phonemizer language (default: en-us)")
@@ -92,9 +92,11 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def main() -> int:
-    args = build_parser().parse_args()
+def build_parser() -> argparse.ArgumentParser:
+    return add_arguments(argparse.ArgumentParser(description=DESCRIPTION))
 
+
+def run(args: argparse.Namespace) -> int:
     if args.batch_size < 1:
         raise ValueError("--batch-size must be >= 1")
 
@@ -124,6 +126,10 @@ def main() -> int:
 
     print(f"Wrote {len(sentences)} rows to {args.output_csv}")
     return 0
+
+
+def main() -> int:
+    return run(build_parser().parse_args())
 
 
 if __name__ == "__main__":
