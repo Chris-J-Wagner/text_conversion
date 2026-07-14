@@ -24,15 +24,6 @@ dev = [
   "numpy>=1.24",
   "python-docx>=0.8.11",
 ]
-notebooks = [
-  "chardet>=5.0",
-  "numpy>=1.24",
-  "pandas>=2.0",
-  "python-docx>=0.8.11",
-  "regex>=2023.0.0",
-  "torch>=2.0",
-  "tqdm>=4.66",
-]
 
 # Console commands installed by `uv tool install` / `pip install`.
 [project.scripts]

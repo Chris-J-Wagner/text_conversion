@@ -1,1 +1,10 @@
-__pycache__*
+__pycache__/
+*.py[cod]
+build/
+dist/
+*.egg-info/
+.eggs/
+.pytest_cache/
+corpora/
+.vscode
+.DS_Store
