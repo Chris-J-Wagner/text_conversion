@@ -600,14 +600,21 @@ def write_chunked_sentences_output(
     sentence_chunks: Sequence[Sequence[str]],
     output_path: str | Path,
 ) -> list[Path]:
-    """Write sentence chunks to numbered files derived from output_path."""
+    """Write sentence chunks to numbered files in a ``<output_dir>/chunks/`` folder.
+
+    Files are named ``<num>_<output_name><suffix>`` (e.g. ``0001_alice.txt``). A single
+    chunk still lands in ``chunks/`` as ``0001_...`` so downstream tools (validate-corpus,
+    convert-to-altavo-csv) can point at one directory regardless of chunking.
+    """
     path = Path(output_path)
     suffix = path.suffix if path.suffix else ".txt"
-    base = path.with_suffix("")
+    name = path.stem
+    chunks_dir = path.parent / "chunks"
+    chunks_dir.mkdir(parents=True, exist_ok=True)
 
     written_paths: list[Path] = []
     for idx, chunk in enumerate(sentence_chunks, start=1):
-        chunk_path = base.parent / f"{base.name}_chunk_{idx:04d}{suffix}"
+        chunk_path = chunks_dir / f"{idx:04d}_{name}{suffix}"
         write_sentences_output(chunk, chunk_path)
         written_paths.append(chunk_path)
 
@@ -642,7 +649,7 @@ def write_chunk_sentence_length_histograms(
         ax.set_xticks(range(1, max_len + 1))
         ax.grid(axis="y", alpha=0.3)
 
-        chart_path = charts_dir / f"chunk_{idx:04d}_sentence_length_hist.png"
+        chart_path = charts_dir / f"{idx:04d}_sentence_length_hist.png"
         fig.tight_layout()
         fig.savefig(chart_path, dpi=150)
         plt.close(fig)

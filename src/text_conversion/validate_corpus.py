@@ -7,16 +7,16 @@ import argparse
 from pathlib import Path
 import re
 
-from src.sentence_extractor import count_words
-from src.sentence_extractor import write_chunk_sentence_length_histograms
+from text_conversion.sentence_extractor import count_words
+from text_conversion.sentence_extractor import write_chunk_sentence_length_histograms
 
 
-def _chunk_sort_key(path: Path) -> tuple[str, int, str]:
-    match = re.search(r"_(?:chunk|chunks)_(\d+)\.txt$", path.name)
+def _chunk_sort_key(path: Path) -> tuple[int, str]:
+    """Order files by a leading ``<num>_`` prefix (e.g. ``0001_alice.txt``)."""
+    match = re.match(r"(\d+)_", path.name)
     if match:
-        prefix = path.name[: match.start()]
-        return prefix, int(match.group(1)), path.name
-    return path.stem, 10**9, path.name
+        return int(match.group(1)), path.name
+    return 10**9, path.name
 
 
 def _load_chunk_sentences(path: Path, encoding: str = "utf-8") -> list[str]:
@@ -50,10 +50,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--pattern",
         action="append",
         default=None,
-        help=(
-            "Glob pattern for chunk files. Repeatable. "
-            "Defaults: '*_chunk_*.txt' and '*_chunks_*.txt'"
-        ),
+        help="Glob pattern for corpus files. Repeatable. Default: '*.txt'",
     )
     parser.add_argument("--encoding", default="utf-8", help="Text file encoding (default: utf-8)")
     return parser
@@ -67,7 +64,7 @@ def main() -> int:
     if args.max_length < args.min_length:
         raise ValueError("--max-length must be >= --min-length")
 
-    patterns = args.pattern or ["*_chunk_*.txt", "*_chunks_*.txt"]
+    patterns = args.pattern or ["*.txt"]
     chunk_paths = {
         path.resolve()
         for pattern in patterns
@@ -77,7 +74,7 @@ def main() -> int:
 
     if not chunk_paths:
         raise FileNotFoundError(
-            f"No chunk files found in '{args.chunks_dir}' for patterns: {patterns}"
+            f"No corpus files found in '{args.chunks_dir}' for patterns: {patterns}"
         )
 
     sorted_paths = sorted((Path(p) for p in chunk_paths), key=_chunk_sort_key)

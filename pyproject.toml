@@ -5,32 +5,43 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "text-conversion"
 version = "0.1.0"
-description = "Utilities for converting documents to sentence corpora."
-requires-python = ">=3.10"
+description = "Utilities for converting documents (PDF/TXT/DOCX) into sentence corpora."
+requires-python = ">=3.11"
+
+# Runtime dependencies of the command-line tools.
+#   pypdf      -> PDF text extraction (extract-sentences)
+#   matplotlib -> sentence-length histograms (extract-sentences, validate-corpus)
+#   phonemizer -> phoneme column (convert-to-altavo-csv; needs an espeak backend installed)
 dependencies = [
-  "numpy>=1.24",
   "matplotlib>=3.7",
-  "python-docx>=0.8.11",
   "pypdf>=4.0.0",
-  "phonemizer"
+  "phonemizer>=3.2",
 ]
 
 [project.optional-dependencies]
 dev = [
   "pytest>=8.0",
+  "numpy>=1.24",
+  "python-docx>=0.8.11",
 ]
 notebooks = [
   "chardet>=5.0",
+  "numpy>=1.24",
   "pandas>=2.0",
-  "phonemizer>=3.2",
+  "python-docx>=0.8.11",
   "regex>=2023.0.0",
   "torch>=2.0",
   "tqdm>=4.66",
 ]
 
+# Console commands installed by `uv tool install` / `pip install`.
 [project.scripts]
-extract-sentences = "extract_sentences:main"
+extract-sentences = "text_conversion.extract_sentences:main"
+validate-corpus = "text_conversion.validate_corpus:main"
+convert-to-altavo-csv = "text_conversion.convert_to_altavo_csv:main"
 
-[tool.setuptools]
-packages = ["src"]
-py-modules = ["extract_sentences"]
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["test"]

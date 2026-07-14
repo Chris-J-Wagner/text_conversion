@@ -8,12 +8,12 @@ from pathlib import Path
 import re
 
 
-def _chunk_sort_key(path: Path) -> tuple[str, int, str]:
-    match = re.search(r"_(?:chunk|chunks)_(\d+)\.txt$", path.name)
+def _chunk_sort_key(path: Path) -> tuple[int, str]:
+    """Order files by a leading ``<num>_`` prefix (e.g. ``0001_alice.txt``)."""
+    match = re.match(r"(\d+)_", path.name)
     if match:
-        prefix = path.name[: match.start()]
-        return prefix, int(match.group(1)), path.name
-    return path.stem, 10**9, path.name
+        return int(match.group(1)), path.name
+    return 10**9, path.name
 
 
 def _load_sentences(path: Path, encoding: str) -> list[str]:
@@ -27,7 +27,7 @@ def _collect_input_files(input_path: Path, patterns: list[str] | None) -> list[P
     if not input_path.is_dir():
         raise FileNotFoundError(f"Input path does not exist: {input_path}")
 
-    globs = patterns or ["*_chunk_*.txt", "*_chunks_*.txt"]
+    globs = patterns or ["*.txt"]
     files = {
         p.resolve()
         for pattern in globs
@@ -86,10 +86,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--pattern",
         action="append",
         default=None,
-        help=(
-            "Glob pattern for directory input (repeatable). "
-            "Defaults: '*_chunk_*.txt' and '*_chunks_*.txt'"
-        ),
+        help="Glob pattern for directory input (repeatable). Default: '*.txt'",
     )
     parser.add_argument("--encoding", default="utf-8", help="Text file encoding (default: utf-8)")
     return parser
@@ -102,7 +99,8 @@ def main() -> int:
         raise ValueError("--batch-size must be >= 1")
 
     files = _collect_input_files(args.input_path, args.pattern)
-
+    print(f"Found {len(files)} input files for phonemization.")
+    
     sentences: list[str] = []
     for file in files:
         sentences.extend(_load_sentences(file, encoding=args.encoding))

@@ -8,14 +8,13 @@ import json
 from pathlib import Path
 import sys
 
-from src.sentence_extractor import DEFAULT_SOFT_DELIMITERS
-from src.sentence_extractor import WORDS_PER_SECOND
-from src.sentence_extractor import chunk_sentences_by_max_minutes
-from src.sentence_extractor import extract_chapter_names_from_toc_pdf
-from src.sentence_extractor import extract_sentences_from_path
-from src.sentence_extractor import write_chunk_sentence_length_histograms
-from src.sentence_extractor import write_chunked_sentences_output
-from src.sentence_extractor import write_sentences_output
+from text_conversion.sentence_extractor import DEFAULT_SOFT_DELIMITERS
+from text_conversion.sentence_extractor import WORDS_PER_SECOND
+from text_conversion.sentence_extractor import chunk_sentences_by_max_minutes
+from text_conversion.sentence_extractor import extract_chapter_names_from_toc_pdf
+from text_conversion.sentence_extractor import extract_sentences_from_path
+from text_conversion.sentence_extractor import write_chunk_sentence_length_histograms
+from text_conversion.sentence_extractor import write_chunked_sentences_output
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -114,23 +113,25 @@ def main() -> int:
     if args.output is not None:
         args.output.parent.mkdir(parents=True, exist_ok=True)
 
+        # Always write into a chunks/ folder (one file when --max-chunk-minutes=0)
+        # so validate-corpus / convert-to-altavo-csv can point at one directory.
+        written_paths = write_chunked_sentences_output(chunks, args.output)
+        chunks_dir = written_paths[0].parent if written_paths else args.output.parent / "chunks"
+
         if args.max_chunk_minutes > 0:
-            written_paths = write_chunked_sentences_output(chunks, args.output)
             print(
                 f"Wrote {len(sentences)} sentences into {len(written_paths)} chunks "
                 f"(max {args.max_chunk_minutes:g} minutes each, estimated)."
             )
-            print("Chunk files:")
-            for path in written_paths:
-                print(path)
         else:
-            write_sentences_output(sentences, args.output)
-            print(f"Wrote {len(sentences)} sentences to {args.output}")
+            print(f"Wrote {len(sentences)} sentences to {len(written_paths)} file(s) in {chunks_dir}")
+        print("Chunk files:")
+        for path in written_paths:
+            print(path)
 
         if args.plot_charts:
-            chart_paths = write_chunk_sentence_length_histograms(chunks, args.output)
-            charts_dir = args.output.parent / "charts"
-            print(f"Wrote {len(chart_paths)} chart(s) to {charts_dir}")
+            chart_paths = write_chunk_sentence_length_histograms(chunks, chunks_dir / args.output.name)
+            print(f"Wrote {len(chart_paths)} chart(s) to {chunks_dir / 'charts'}")
         return 0
 
     if args.stdout_json:
